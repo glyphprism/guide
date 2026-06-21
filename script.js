@@ -1,353 +1,337 @@
-// ============================================= //
-// COMBINE DATABASES
-// ============================================= //
-const DB = {
-    categories: [dbNpc, dbItem]
-};
+document.addEventListener('DOMContentLoaded', () => {
+  const charGrid = document.getElementById('character-grid');
+  const itemsGrid = document.getElementById('items-grid');
+  const mainWrapper = document.getElementById('main-wrapper');
+  const charDetailWrapper = document.getElementById('character-detail-wrapper');
+  const itemDetailWrapper = document.getElementById('item-detail-wrapper');
+  
+  const charSection = document.getElementById('character-section');
+  const itemsSection = document.getElementById('items-section');
+  const tabItems = document.querySelectorAll('.tabs-wrapper .tab-item');
 
-// ============================================= //
-// FLATTEN SEARCH INDEX
-// ============================================= //
-const searchIndex = [];
+  const searchInput = document.querySelector('.search-input');
+  const searchForm = document.querySelector('.search-form');
+  const dropdown = document.getElementById('search-results-dropdown');
+  const clearSearchBtn = document.getElementById('clear-search-btn');
 
-// Menambahkan Kategori ke dalam Search Index agar bisa dicari
-DB.categories.forEach(cat => {
-    searchIndex.push({
-        isCategory: true,
-        categoryId: cat.id,
-        categoryName: cat.name,
-        entryName: cat.name,
-        entryIcon: cat.icon,
-        searchTerms: [cat.name.toLowerCase()],
-        category: cat
+  let itemOrigin = 'main';
+  let activeChar = null;
+
+  mainWrapper.classList.add('fade-in');
+
+  function switchView(hideStage, showStage, callback) {
+    hideStage.classList.remove('fade-in');
+    hideStage.classList.add('fade-out');
+    
+    setTimeout(() => {
+      hideStage.style.display = 'none';
+      hideStage.classList.remove('fade-out');
+      
+      if (callback) callback();
+      
+      showStage.style.display = 'block';
+      showStage.getBoundingClientRect();
+      showStage.classList.add('fade-in');
+    }, 250);
+  }
+
+  tabItems.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const targetTab = tab.getAttribute('data-tab');
+      if (!targetTab) return;
+
+      tabItems.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      if (targetTab === 'character') {
+        charSection.style.display = 'block';
+        itemsSection.style.display = 'none';
+      } else if (targetTab === 'items') {
+        charSection.style.display = 'none';
+        itemsSection.style.display = 'block';
+      }
     });
+  });
 
-    cat.entries.forEach(entry => {
-        searchIndex.push({
-            isCategory: false,
-            categoryId: cat.id,
-            categoryName: cat.name,
-            entryId: entry.id,
-            entryName: entry.name,
-            entryIcon: entry.icon,
-            searchTerms: entry.searchTerms,
-            entry: entry,
-            category: cat
+  // Render Grid Awal (Menampilkan Semua Data Tanpa Filter)
+  function initGrids() {
+    charGrid.innerHTML = '';
+    characters.forEach(char => {
+      const item = document.createElement('div');
+      item.className = 'grid-item';
+      item.innerHTML = `
+        <img src="${char.foto}" alt="${char.namaList}" class="item-icon">
+        <div class="item-name">${char.namaList}</div>
+      `;
+      item.addEventListener('click', () => {
+        switchView(mainWrapper, charDetailWrapper, () => {
+          showCharDetail(char);
         });
+      });
+      charGrid.appendChild(item);
     });
-});
 
-// ============================================= //
-// HELPER FUNCTION FOR XSS SANITIZATION
-// ============================================= //
-function escapeHTML(str) {
-    return str.replace(/[&<>'"]/g, 
-        tag => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            "'": '&#39;',
-            '"': '&quot;'
-        }[tag] || tag)
+    itemsGrid.innerHTML = '';
+    items.forEach(itm => {
+      const item = document.createElement('div');
+      item.className = 'grid-item';
+      item.innerHTML = `
+        <img src="${itm.foto}" alt="${itm.nama}" class="item-icon">
+        <div class="item-name">${itm.nama}</div>
+      `;
+      item.addEventListener('click', () => {
+        itemOrigin = 'main';
+        switchView(mainWrapper, itemDetailWrapper, () => {
+          showItemDetail(itm);
+        });
+      });
+      itemsGrid.appendChild(item);
+    });
+  }
+
+  // Fungsi untuk memproses dan memperbarui isi search index dropdown
+  function updateSearchDropdown(keyword) {
+    const query = keyword.toLowerCase().trim();
+    dropdown.innerHTML = '';
+
+    if (query === '') {
+      dropdown.style.display = 'none';
+      if (clearSearchBtn) clearSearchBtn.style.display = 'none';
+      if (searchInput) searchInput.style.paddingRight = '20px'; // Buat full saat tidak ada tombol hapus
+      return;
+    }
+
+    if (clearSearchBtn) clearSearchBtn.style.display = 'flex';
+    if (searchInput) searchInput.style.paddingRight = '45px'; // Beri ruang aman saat tombol hapus muncul
+
+    // Filter Karakter
+    const matchedChars = characters.filter(char => 
+      char.namaList.toLowerCase().includes(query) || 
+      char.namaDetail.toLowerCase().includes(query)
     );
-}
 
-// ============================================= //
-// RENDER MAIN CARDS
-// ============================================= //
-function renderMainCards() {
-    const grid = document.getElementById('main-cards');
-    grid.innerHTML = DB.categories.map(cat => `
-        <div class="db-card theme-${cat.id}" onclick="openCategoryPopup('${cat.id}')">
-            <div class="card-icon">${cat.icon}</div>
-            <div class="card-tag">${escapeHTML(cat.tag)}</div>
-            <div class="card-title">${escapeHTML(cat.name)}</div>
-            <div class="card-arrow"><i class="fa-solid fa-arrow-right"></i></div>
-        </div>
-    `).join('');
-}
-
-// ============================================= //
-// POPUP SYSTEM & NAVIGATION HISTORY
-// ============================================= //
-const overlay = document.getElementById('popup-overlay');
-const popupIcon = document.getElementById('popup-icon');
-const popupTitle = document.getElementById('popup-title');
-const popupSubtitle = document.getElementById('popup-subtitle');
-const popupBody = document.getElementById('popup-body');
-const popupBox = document.getElementById('popup-box');
-
-// Track popup navigation history
-let popupHistory = [];
-
-function openPopup(iconHtml, title, subtitle, bodyHtml, catId) {
-    popupIcon.innerHTML = iconHtml;
-    popupTitle.textContent = title;
-    popupSubtitle.textContent = subtitle;
-    popupBody.innerHTML = bodyHtml;
-    
-    // Reset theme classes
-    popupBox.className = "popup-box";
-    if (catId) {
-        popupBox.classList.add(`theme-${catId}`);
-    }
-    
-    overlay.classList.add('active');
-    document.body.style.overflow = 'hidden';
-}
-
-function closePopup() {
-    overlay.classList.remove('active');
-    document.body.style.overflow = '';
-    popupHistory = []; // Clear history on close
-}
-
-function handlePopupBack() {
-    if (popupHistory.length > 1) {
-        popupHistory.pop(); // Remove current page
-        const previousPage = popupHistory.pop(); // Get previous page data
-        
-        if (previousPage.type === 'category') {
-            openCategoryPopup(previousPage.catId, false);
-        } else if (previousPage.type === 'detail') {
-            openEntryDetail(previousPage.catId, previousPage.entryId, false);
-        }
-    } else {
-        closePopup();
-    }
-}
-
-document.getElementById('popup-close').onclick = closePopup;
-overlay.addEventListener('click', e => { if (e.target === overlay) closePopup(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closePopup(); });
-
-// ============================================= //
-// CATEGORY POPUP (list entries)
-// ============================================= //
-function openCategoryPopup(catId, trackHistory = true) {
-    const cat = DB.categories.find(c => c.id === catId);
-    if (!cat) return;
-
-    if (trackHistory) {
-        const lastPage = popupHistory[popupHistory.length - 1];
-        if (!lastPage || !(lastPage.type === 'category' && lastPage.catId === catId)) {
-            popupHistory.push({ type: 'category', catId: catId });
-        }
-    } else {
-        popupHistory.push({ type: 'category', catId: catId });
-    }
-
-    const listHtml = cat.entries.map(entry => {
-        const iconOrImg = entry.image 
-            ? `<img src="${entry.image}" alt="${escapeHTML(entry.name)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">` 
-            : entry.icon;
-        return `
-        <div class="list-item" onclick="openEntryDetail('${catId}', '${entry.id}')">
-            <div class="list-item-icon">${iconOrImg}</div>
-            <div class="list-item-info">
-                <div class="list-item-name">${escapeHTML(entry.name)}</div>
-                <div class="list-item-sub">${escapeHTML(entry.sub)}</div>
-            </div>
-            <i class="fa-solid fa-chevron-right list-item-arrow"></i>
-        </div>
-        `;
-    }).join('');
-
-    openPopup(
-        cat.icon,
-        `${cat.name}`,
-        `${cat.entries.length} entri tersedia`,
-        listHtml,
-        catId
+    // Filter Items
+    const matchedItems = items.filter(itm => 
+      itm.nama.toLowerCase().includes(query)
     );
-}
 
-// ============================================= //
-// ENTRY DETAIL POPUP
-// ============================================= //
-function openEntryDetail(catId, entryId, trackHistory = true) {
-    const cat = DB.categories.find(c => c.id === catId);
-    const entry = cat?.entries.find(e => e.id === entryId);
-    if (!entry) return;
-
-    if (trackHistory) {
-        const lastPage = popupHistory[popupHistory.length - 1];
-        if (!lastPage || !(lastPage.type === 'detail' && lastPage.entryId === entryId && lastPage.catId === catId)) {
-            popupHistory.push({ type: 'detail', catId: catId, entryId: entryId });
-        }
-    } else {
-        popupHistory.push({ type: 'detail', catId: catId, entryId: entryId });
+    if (matchedChars.length === 0 && matchedItems.length === 0) {
+      dropdown.innerHTML = `<div class="dropdown-item" style="cursor: default; font-weight:600; color:#8c7662; font-size: 12px; justify-content: center; width: 100%; box-sizing: border-box;">Tidak ada hasil ditemukan</div>`;
+      dropdown.style.display = 'block';
+      return;
     }
 
-    const d = entry.detail;
-    const sectionsHtml = d.sections.map(sec => {
-        let content = '';
-        if (sec.type === 'tags') {
-            const cls = sec.color === 'heart' ? 'tag heart-tag' : 'tag';
-            content = `<div class="tag-list">${sec.tags.map(t => `<span class="${cls}">${escapeHTML(t)}</span>`).join('')}</div>`;
-        } else if (sec.type === 'item-tags') {
-            const cls = sec.color === 'heart' ? 'tag heart-tag tag-item' : 'tag tag-item';
-            const itemCat = DB.categories.find(c => c.id === 'item');
-            
-            const tagsHtml = sec.items.map(itemId => {
-                const itemEntry = itemCat?.entries.find(e => e.id === itemId);
-                if (!itemEntry) return '';
-                
-                const imgHtml = itemEntry.image 
-                    ? `<img src="${itemEntry.image}" alt="${escapeHTML(itemEntry.name)}">` 
-                    : itemEntry.icon;
-                    
-                return `<span class="${cls}" onclick="event.stopPropagation(); openEntryDetail('item', '${itemId}')">${imgHtml} ${escapeHTML(itemEntry.name)} <i class="fa-solid fa-chevron-right" style="font-size: 10px; margin-left: 4px; opacity: 0.7;"></i></span>`;
-            }).join('');
-            
-            content = `<div class="tag-list">${tagsHtml}</div>`;
-        } else if (sec.type === 'steps') {
-            content = `<div class="step-list">${sec.steps.map((s, i) => `
-                <div class="step-item">
-                    <div class="step-text">${escapeHTML(s)}</div>
-                </div>
-            `).join('')}</div>`;
-        } else if (sec.type === 'quote') {
-            content = `<div class="detail-row"><div class="detail-row-value" style="text-align:left;font-style:italic;font-weight:400">${escapeHTML(sec.text)}</div></div>`;
-        } else {
-            content = sec.rows.map(row => `
-                <div class="detail-row">
-                    <div class="detail-row-label">${escapeHTML(row.label)}</div>
-                    <div class="detail-row-value">${escapeHTML(row.value)}</div>
-                </div>
-            `).join('');
-        }
+    // Tampilkan Hasil Filter Karakter ke Dropdown
+    matchedChars.forEach(char => {
+      const div = document.createElement('div');
+      div.className = 'dropdown-item';
+      div.innerHTML = `
+        <img src="${char.foto}" alt="${char.namaList}">
+        <div class="item-info">
+          <span class="item-title">${char.namaList}</span>
+          <span class="item-meta">Karakter • ${char.pekerjaan}</span>
+        </div>
+      `;
+      div.addEventListener('click', () => {
+        dropdown.style.display = 'none';
+        searchInput.value = '';
+        if (clearSearchBtn) clearSearchBtn.style.display = 'none';
+        if (searchInput) searchInput.style.paddingRight = '20px'; // Kembali full setelah dibersihkan lewat klik item
+        switchView(mainWrapper, charDetailWrapper, () => {
+          showCharDetail(char);
+        });
+      });
+      dropdown.appendChild(div);
+    });
 
-        return `
-            <div class="detail-section">
-                <div class="detail-section-title">${escapeHTML(sec.title)}</div>
-                ${content}
-            </div>
-        `;
+    // Tampilkan Hasil Filter Items ke Dropdown
+    matchedItems.forEach(itm => {
+      const div = document.createElement('div');
+      div.className = 'dropdown-item';
+      div.innerHTML = `
+        <img src="${itm.foto}" alt="${itm.nama}">
+        <div class="item-info">
+          <span class="item-title">${itm.nama}</span>
+          <span class="item-meta">Item</span>
+        </div>
+      `;
+      div.addEventListener('click', () => {
+        dropdown.style.display = 'none';
+        searchInput.value = '';
+        if (clearSearchBtn) clearSearchBtn.style.display = 'none';
+        if (searchInput) searchInput.style.paddingRight = '20px'; // Kembali full setelah dibersihkan lewat klik item
+        itemOrigin = 'main';
+        switchView(mainWrapper, itemDetailWrapper, () => {
+          showItemDetail(itm);
+        });
+      });
+      dropdown.appendChild(div);
+    });
+
+    dropdown.style.display = 'block';
+  }
+
+  // Logika Live Search untuk Dropdown Mengambang
+  if (searchInput && dropdown) {
+    // Pastikan padding awal diset ke full (20px) jika input pertama kali dimuat dalam keadaan kosong
+    if (searchInput.value.trim() === '') {
+      searchInput.style.paddingRight = '20px';
+    }
+
+    // Event saat pengguna mengetik teks pencarian
+    searchInput.addEventListener('input', (e) => {
+      updateSearchDropdown(e.target.value);
+    });
+
+    // Event saat kolom pencarian diklik/difokuskan kembali (Auto muncul tanpa ngetik ulang)
+    searchInput.addEventListener('focus', (e) => {
+      if (e.target.value.trim() !== '') {
+        updateSearchDropdown(e.target.value);
+      }
+    });
+  }
+
+  // Logika klik pada tombol hapus teks pencarian
+  if (clearSearchBtn && searchInput) {
+    clearSearchBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      clearSearchBtn.style.display = 'none';
+      searchInput.style.paddingRight = '20px'; // Kembali full setelah teks dihapus via tombol silang
+      if (dropdown) {
+        dropdown.innerHTML = '';
+        dropdown.style.display = 'none';
+      }
+      searchInput.focus();
+    });
+  }
+
+  // Tutup dropdown jika mengklik di luar area form pencarian
+  document.addEventListener('click', (e) => {
+    if (searchForm && !searchForm.contains(e.target)) {
+      if (dropdown) dropdown.style.display = 'none';
+    }
+  });
+
+  if (searchForm) {
+    searchForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+    });
+  }
+
+  // Panggil inisialisasi awal grid
+  initGrids();
+
+  function getItemFoto(itemName) {
+    const foundItem = items.find(i => i.nama.toLowerCase() === itemName.toLowerCase());
+    return foundItem ? foundItem.foto : '';
+  }
+
+  function navigateToItemDetail(itemName) {
+    const foundItem = items.find(i => i.nama.toLowerCase() === itemName.toLowerCase());
+    if (foundItem) {
+      itemOrigin = 'char-detail';
+      switchView(charDetailWrapper, itemDetailWrapper, () => {
+        showItemDetail(foundItem);
+      });
+    }
+  }
+
+  // Fungsi pembantu global untuk generate komponen badge item kesukaan
+  function generateBadgeHtml(itemArray, tagClass) {
+    return itemArray.map(i => {
+      const foto = getItemFoto(i);
+      const imgTag = foto ? `<img src="${foto}" alt="${i}" style="width: 18px; height: 18px; object-fit: cover; border-radius: 2px; margin-right: 6px; border: 1px solid #4a3b32; vertical-align: middle;">` : '';
+      return `<span class="${tagClass}" data-item="${i}" style="cursor: pointer; display: inline-flex; align-items: center;">${imgTag}${i}<i class="fas fa-angle-right" style="margin-left: 6px;"></i></span>`;
     }).join('');
+  }
 
-    const avatarHtml = entry.image 
-        ? `<div class="detail-image-container"><img src="${entry.image}" alt="${escapeHTML(entry.name)}"></div>` 
-        : `<div class="detail-avatar">${entry.icon}</div>`;
-
-    const bodyHtml = `
-        <button class="back-btn" onclick="handlePopupBack()">
-            <i class="fa-solid fa-arrow-left"></i> Kembali
-        </button>
-        <div class="detail-banner">
-            ${avatarHtml}
-            <div>
-                <div class="detail-name">${escapeHTML(d.banner.name)}</div>
-                <div class="detail-role">${escapeHTML(d.banner.role)}</div>
+  function showCharDetail(char) {
+    activeChar = char;
+    
+    charDetailWrapper.innerHTML = `
+      <div class="card-container">
+        <div class="detail-card">
+            <button id="back-char-btn" class="back-btn"><i class="fas fa-arrow-left"></i> Kembali</button>
+            <div class="detail-profile">
+                <img src="${char.foto}" alt="${char.namaDetail}" class="detail-img">
+                <div class="detail-text">
+                    <h1>${char.namaDetail}</h1>
+                    <div class="info-grid">
+                        <div class="info-box"><strong>Pekerjaan</strong> ${char.pekerjaan}</div>
+                        <div class="info-box"><strong>Hobi</strong> ${char.hobi}</div>
+                    </div>
+                </div>
             </div>
         </div>
-        ${sectionsHtml}
+
+        <div class="detail-card">
+            <h3><i class="fas fa-hashtag"></i> Kesukaan & Kencan</h3>
+            <p><strong>Barang Spesial:</strong></p>
+            <div class="item-list">
+              ${generateBadgeHtml(char.barangSpesial, 'tag-item-detail')}
+            </div>
+            <p><strong>Barang Favorit:</strong></p>
+            <div class="item-list">
+              ${generateBadgeHtml(char.barangFavorit, 'tag-item-detail')}
+            </div>
+            <p><strong>Kencan ke-2:</strong></p>
+            <div class="item-list">
+              ${generateBadgeHtml(char.kencanKedua, 'tag-item-detail')}
+            </div>
+        </div>
+
+        <div class="detail-card">
+            <h3><i class="fas fa-hashtag"></i> Hint Event Hati</h3>
+            <ul class="hint-list">
+                ${char.hintHati.map(h => `<li>${h}</li>`).join('')}
+            </ul>
+        </div>
+      </div>
     `;
 
-    openPopup(
-        entry.image ? `<img src="${entry.image}" alt="${escapeHTML(entry.name)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">` : entry.icon,
-        entry.name,
-        `${cat.name} • Detail`,
-        bodyHtml,
-        catId
-    );
+    charDetailWrapper.querySelectorAll('.item-list span').forEach(spanBtn => {
+      spanBtn.addEventListener('click', () => {
+        const itemName = spanBtn.getAttribute('data-item');
+        navigateToItemDetail(itemName);
+      });
+    });
 
-    document.getElementById('popup-box').scrollTop = 0;
-}
+    document.getElementById('back-char-btn').addEventListener('click', () => {
+      switchView(charDetailWrapper, mainWrapper);
+    });
+  }
 
-// ============================================= //
-// LIVE SEARCH
-// ============================================= //
-const searchInput = document.getElementById('live-search');
-const searchResults = document.getElementById('search-results');
-const clearSearchBtn = document.getElementById('clear-search');
-
-searchInput.addEventListener('input', function () {
-    const q = this.value.trim().toLowerCase();
-    
-    if (this.value.length > 0) {
-        clearSearchBtn.style.display = 'block';
-        this.classList.add('has-clear-btn');
-    } else {
-        clearSearchBtn.style.display = 'none';
-        this.classList.remove('has-clear-btn');
-    }
-
-    if (q.length < 1) {
-        searchResults.classList.remove('visible');
-        searchResults.innerHTML = '';
-        return;
-    }
-
-    const matches = searchIndex.filter(item =>
-        item.entryName.toLowerCase().includes(q) ||
-        item.searchTerms.some(t => t.toLowerCase().includes(q))
-    );
-
-    if (matches.length === 0) {
-        searchResults.innerHTML = `<div class="no-result">🔍 Tidak ada hasil untuk "<strong>${escapeHTML(this.value)}</strong>"</div>`;
-    } else {
-        const resultsHtml = matches.map(m => `
-            <div class="search-result-item" onclick="handleSearchClick('${m.categoryId}', '${m.isCategory ? 'CAT' : m.entryId}')">
-                <div class="result-icon">${m.entry?.image ? `<img src="${m.entry.image}" alt="${escapeHTML(m.entryName)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">` : m.entryIcon}</div>
-                <div>
-                    <div class="result-breadcrumb">${m.isCategory ? 'Kategori' : escapeHTML(m.categoryName)} • ${escapeHTML(m.entryName)}</div>
-                    <div class="result-name">${escapeHTML(m.entryName)}</div>
+  function showItemDetail(itm) {
+    itemDetailWrapper.innerHTML = `
+      <div class="card-container">
+        <div class="detail-card">
+            <button id="back-item-btn" class="back-btn"><i class="fas fa-arrow-left"></i> Kembali</button>
+            <div class="detail-profile">
+                <img src="${itm.foto}" alt="${itm.nama}" class="detail-img">
+                <div class="detail-text">
+                    <h1>${itm.nama}</h1>
+                    <div style="font-size: 13px; font-weight: 500; color: #8c7662; margin-top: 4px;">
+                      ${itm.catatan ? itm.catatan : ''}
+                    </div>
                 </div>
-                <i class="fa-solid fa-arrow-right" style="margin-left:auto;color:#a08060;font-size:13px"></i>
             </div>
-        `).join('');
-        
-        searchResults.innerHTML = `<div style="padding: 10px 20px; font-size: 11px; font-weight: 700; color: #a08060; border-bottom: 2px solid #f0e8d8;">${matches.length} HASIL DITEMUKAN</div>` + resultsHtml;
-    }
+        </div>
 
-    searchResults.classList.add('visible');
+        <div class="detail-card">
+            <h3><i class="fas fa-hashtag"></i> Cara Mendapatkan</h3>
+            <ul class="hint-list">
+                ${itm.caraMendapatkan.map(c => `<li>${c}</li>`).join('')}
+            </ul>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('back-item-btn').addEventListener('click', () => {
+      if (itemOrigin === 'char-detail' && activeChar) {
+        switchView(itemDetailWrapper, charDetailWrapper);
+      } else {
+        switchView(itemDetailWrapper, mainWrapper);
+      }
+    });
+  }
 });
-
-clearSearchBtn.addEventListener('click', function() {
-    searchInput.value = '';
-    searchResults.classList.remove('visible');
-    searchResults.innerHTML = '';
-    this.style.display = 'none';
-    searchInput.classList.remove('has-clear-btn');
-    searchInput.focus();
-});
-
-function handleSearchClick(catId, entryId) {
-    searchResults.classList.remove('visible');
-    searchInput.value = '';
-    clearSearchBtn.style.display = 'none';
-    searchInput.classList.remove('has-clear-btn');
-    // Clear history because it starts a fresh navigation from search bar
-    popupHistory = [];
-    
-    if (entryId === 'CAT') {
-        openCategoryPopup(catId);
-    } else {
-        openEntryDetail(catId, entryId);
-    }
-}
-
-// Automatically show search results again when the search form is focused/clicked
-searchInput.addEventListener('focus', function () {
-    if (this.value.length > 0) {
-        clearSearchBtn.style.display = 'block';
-        this.classList.add('has-clear-btn');
-    }
-    if (this.value.trim().length >= 1) {
-        searchResults.classList.add('visible');
-    }
-});
-
-// Global listener to close search results when clicking outside
-document.addEventListener('click', function (event) {
-    const isClickInside = searchInput.contains(event.target) || searchResults.contains(event.target) || clearSearchBtn.contains(event.target);
-    if (!isClickInside) {
-        searchResults.classList.remove('visible');
-    }
-});
-
-// ============================================= //
-// INIT
-// ============================================= //
-renderMainCards();
