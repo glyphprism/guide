@@ -1,52 +1,67 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Citampi Stories Wiki - Premium Hub</title>
-    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Citampi Stories Wiki</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<div class="header-wrapper">
-    <header class="hero">
-        <div class="search-container-holder">
-            <div class="search-box-wrapper" id="sticky-search">
-                <div class="search-inner-box">
-                    <input type="text" id="live-search" placeholder="Cari info Isma, Job Guru, Crafting Semen..." autocomplete="off">
-                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                    <i class="fa-solid fa-xmark clear-icon" id="clear-search"></i>
-                    <div class="search-results" id="search-results"></div>
-                </div>
-            </div>
-        </div>
-    </header>
-</div>
-
-<div class="main-content">
-    <div class="cards-grid" id="main-cards"></div>
-</div>
-
-<div class="popup-overlay" id="popup-overlay">
-    <div class="popup-box" id="popup-box">
-        <div class="popup-header" id="popup-header">
-            <div class="popup-header-left">
-                <div class="popup-header-icon" id="popup-icon"></div>
-                <div>
-                    <div class="popup-title" id="popup-title"></div>
-                    <div class="popup-subtitle" id="popup-subtitle"></div>
-                </div>
-            </div>
-            <button class="popup-close" id="popup-close"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div class="popup-body" id="popup-body"></div>
+  
+<div id="main-wrapper">
+  <div class="header-container">
+    <form class="search-form" action="#" method="GET">
+      <span class="material-symbols-rounded search-icon">search</span>
+      <input type="text" class="search-input" placeholder="Cari nama karakter, items, crafting, dll" aria-label="Search">
+      <button type="button" id="clear-search-btn" class="clear-search-btn" style="display: none;"><i class="fas fa-times"></i></button>
+      <div id="search-results-dropdown" class="search-dropdown" style="display: none;"></div>
+    </form>
+    <div class="tabs-wrapper">
+      <div class="tab-item active" data-tab="character">
+        <img src="image/character/isma.jpg" alt="Grass Icon" class="icon">
+        <div class="text-container"> Karakter </div>
+      </div>
+      <div class="tab-item" data-tab="items">
+        <img src="image/items/parfum.jpg" alt="Icon 1" class="icon">
+        <div class="text-container">Items</div>
+      </div>
+      <div class="tab-item">
+        <img src="" alt="Icon 2" class="icon">
+        <div class="text-container">Coming Soon</div>
+      </div>
+      <div class="tab-item">
+        <img src="" alt="Icon 3" class="icon">
+        <div class="text-container">Coming Soon</div>
+      </div>
+      <div class="tab-item">
+        <img src="" alt="Icon 4" class="icon">
+        <div class="text-container">Coming Soon</div>
+      </div>
+      <div class="tab-item">
+        <img src="" alt="Icon 5" class="icon">
+        <div class="text-container">Coming soon</div>
+      </div>
     </div>
+  </div>
+  <div class="list-wrapper" id="character-section">
+    <div class="list-grid" id="character-grid">
+    </div>
+  </div>
+  <div class="list-wrapper" id="items-section" style="display: none;">
+    <div class="list-grid" id="items-grid">
+    </div>
+  </div>
 </div>
 
-<script src="database-npc.js"></script>
-<script src="database-item.js"></script>
+<div id="character-detail-wrapper" style="display: none;"></div>
+<div id="item-detail-wrapper" style="display: none;"></div>
+
+<script src="database/character.js"></script>
+<script src="database/items.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
